@@ -1,7 +1,13 @@
 package com.jewelry.pims.service.impl;
 
 import com.jewelry.pims.common.BusinessException;
+import com.jewelry.pims.common.DocumentStatus;
+import com.jewelry.pims.common.InventoryTxnType;
 import com.jewelry.pims.common.NoGenerator;
+import com.jewelry.pims.common.PageResult;
+import com.jewelry.pims.common.PageUtils;
+import com.jewelry.pims.common.SourceType;
+import com.jewelry.pims.common.TraceType;
 import com.jewelry.pims.domain.BusinessEntities;
 import com.jewelry.pims.domain.MasterEntities;
 import com.jewelry.pims.dto.sales.SalesDtos;
@@ -13,23 +19,31 @@ import com.jewelry.pims.service.SalesService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 销售业务实现。
+ */
 public class SalesServiceImpl implements SalesService {
 
     private final SalesMapper salesMapper;
     private final MasterDataMapper masterDataMapper;
     private final InventoryMapper inventoryMapper;
 
+    /**
+     * 创建销售单和销售明细。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public SalesDtos.SaleOrderView createOrder(SalesDtos.SaleOrderCreateRequest request) {
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (SalesDtos.SaleItemRequest item : request.getItems()) {
@@ -41,7 +55,7 @@ public class SalesServiceImpl implements SalesService {
         BusinessEntities.SaleOrder order = new BusinessEntities.SaleOrder();
         order.setOrderNo(NoGenerator.generate("SO"));
         order.setCustomerId(request.getCustomerId());
-        order.setStatus("DRAFT");
+        order.setStatus(DocumentStatus.DRAFT.name());
         order.setTotalAmount(totalAmount);
         order.setTotalCost(BigDecimal.ZERO);
         order.setCreatedBy(AuthContext.userId());
@@ -61,18 +75,30 @@ public class SalesServiceImpl implements SalesService {
             item.setSubtotalAmount(requestItem.getUnitPrice().multiply(BigDecimal.valueOf(requestItem.getQuantity())));
             salesMapper.insertItem(item);
         }
+        writeTrace(TraceType.SALE_CREATED, SourceType.SALE_ORDER, order.getOrderNo(), null, null, null, "销售单创建");
         return getOrder(order.getId());
     }
 
+    /**
+     * 按条件分页查询销售单。
+     */
     @Override
-    public List<SalesDtos.SaleOrderView> listOrders() {
-        List<SalesDtos.SaleOrderView> result = new ArrayList<>();
-        for (BusinessEntities.SaleOrder order : salesMapper.listOrders()) {
-            result.add(buildView(order));
-        }
-        return result;
+    public PageResult<SalesDtos.SaleOrderView> listOrders(SalesDtos.SaleOrderQuery query) {
+        SalesDtos.SaleOrderQuery safeQuery = query == null ? new SalesDtos.SaleOrderQuery() : query;
+        List<SalesDtos.SaleOrderView> filtered = salesMapper.listOrders().stream()
+                .map(this::buildView)
+                .filter(item -> !StringUtils.hasText(safeQuery.getOrderNo()) || item.getOrderNo().contains(safeQuery.getOrderNo()))
+                .filter(item -> !StringUtils.hasText(safeQuery.getStatus()) || safeQuery.getStatus().equals(item.getStatus()))
+                .filter(item -> !StringUtils.hasText(safeQuery.getCertificateNo()) || containsCertificate(item, safeQuery.getCertificateNo()))
+                .filter(item -> safeQuery.getStartDate() == null || !item.getCreatedAt().toLocalDate().isBefore(safeQuery.getStartDate()))
+                .filter(item -> safeQuery.getEndDate() == null || !item.getCreatedAt().toLocalDate().isAfter(safeQuery.getEndDate()))
+                .collect(Collectors.toList());
+        return PageUtils.paginate(filtered, safeQuery);
     }
 
+    /**
+     * 查询销售单详情。
+     */
     @Override
     public SalesDtos.SaleOrderView getOrder(Long id) {
         BusinessEntities.SaleOrder order = salesMapper.findOrderById(id);
@@ -82,14 +108,17 @@ public class SalesServiceImpl implements SalesService {
         return buildView(order);
     }
 
+    /**
+     * 审核销售单并执行库存扣减。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void approve(Long id) {
         BusinessEntities.SaleOrder order = salesMapper.findOrderById(id);
         if (order == null) {
             throw new BusinessException("销售单不存在");
         }
-        if (!"DRAFT".equals(order.getStatus())) {
+        if (!DocumentStatus.DRAFT.name().equals(order.getStatus())) {
             throw new BusinessException("仅草稿单可审核");
         }
         BigDecimal totalCost = BigDecimal.ZERO;
@@ -117,7 +146,7 @@ public class SalesServiceImpl implements SalesService {
 
             BusinessEntities.InventoryTxn txn = new BusinessEntities.InventoryTxn();
             txn.setTxnNo(NoGenerator.generate("TXN"));
-            txn.setTxnType("SALE_OUT");
+            txn.setTxnType(InventoryTxnType.SALE_OUT.name());
             txn.setWarehouseId(item.getWarehouseId());
             txn.setProductId(item.getProductId());
             txn.setRelatedOrderId(order.getId());
@@ -133,10 +162,10 @@ public class SalesServiceImpl implements SalesService {
             txn.setCreatedBy(AuthContext.userId());
             inventoryMapper.insertTxn(txn);
 
-            writeTrace("SALE_OUT", "SALE_ORDER", order.getOrderNo(), item.getProductId(), item.getBatchNo(), item.getCertificateNo(),
+            writeTrace(TraceType.SALE_OUT, SourceType.SALE_ORDER, order.getOrderNo(), item.getProductId(), item.getBatchNo(), item.getCertificateNo(),
                     "销售出库，数量=" + item.getQuantity());
         }
-        order.setStatus("APPROVED");
+        order.setStatus(DocumentStatus.APPROVED.name());
         order.setTotalCost(totalCost);
         order.setApprovedBy(AuthContext.userId());
         order.setApprovedAt(LocalDateTime.now());
@@ -174,11 +203,16 @@ public class SalesServiceImpl implements SalesService {
         return view;
     }
 
-    private void writeTrace(String traceType, String sourceType, String sourceNo,
+    private boolean containsCertificate(SalesDtos.SaleOrderView view, String certificateNo) {
+        return view.getItems() != null && view.getItems().stream()
+                .anyMatch(item -> certificateNo.equals(item.getCertificateNo()));
+    }
+
+    private void writeTrace(TraceType traceType, SourceType sourceType, String sourceNo,
                             Long productId, String batchNo, String certificateNo, String content) {
         BusinessEntities.TraceLog traceLog = new BusinessEntities.TraceLog();
-        traceLog.setTraceType(traceType);
-        traceLog.setSourceType(sourceType);
+        traceLog.setTraceType(traceType.name());
+        traceLog.setSourceType(sourceType.name());
         traceLog.setSourceNo(sourceNo);
         traceLog.setProductId(productId);
         traceLog.setBatchNo(batchNo);

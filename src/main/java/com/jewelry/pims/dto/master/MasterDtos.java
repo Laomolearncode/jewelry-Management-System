@@ -1,5 +1,6 @@
 package com.jewelry.pims.dto.master;
 
+import com.jewelry.pims.common.PageQuery;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -109,5 +110,13 @@ public final class MasterDtos {
         private Integer abcLevel;
         private Integer status;
         private LocalDateTime createdAt;
+    }
+
+    @Data
+    public static class ProductQuery extends PageQuery {
+        private String productCode;
+        private String productName;
+        private String certificateNo;
+        private Integer status;
     }
 }

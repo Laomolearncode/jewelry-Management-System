@@ -6,9 +6,9 @@ import java.util.List;
 
 public interface ReportService {
 
-    InventoryDtos.DashboardView dashboard();
+    InventoryDtos.DashboardView dashboard(InventoryDtos.ReportQuery query);
 
     List<InventoryDtos.AbcItemView> abcAnalysis();
 
-    List<InventoryDtos.TurnoverView> turnoverAnalysis();
+    List<InventoryDtos.TurnoverView> turnoverAnalysis(InventoryDtos.ReportQuery query);
 }

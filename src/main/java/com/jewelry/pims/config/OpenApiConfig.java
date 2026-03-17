@@ -1,7 +1,10 @@
 package com.jewelry.pims.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -10,9 +13,18 @@ public class OpenApiConfig {
 
     @Bean
     public OpenAPI openAPI() {
-        return new OpenAPI().info(new Info()
-                .title("饰品进销存系统 API")
-                .version("1.0.0")
-                .description("基于 Spring Boot + MyBatis + MySQL 的饰品进销存系统后端接口"));
+        final String schemeName = "bearerAuth";
+        return new OpenAPI()
+                .info(new Info()
+                        .title("饰品进销存系统 API")
+                        .version("1.1.0")
+                        .description("基于 Spring Boot + MyBatis + MySQL 的饰品进销存系统后端接口"))
+                .addSecurityItem(new SecurityRequirement().addList(schemeName))
+                .components(new Components()
+                        .addSecuritySchemes(schemeName, new SecurityScheme()
+                                .name("Authorization")
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("Token")));
     }
 }

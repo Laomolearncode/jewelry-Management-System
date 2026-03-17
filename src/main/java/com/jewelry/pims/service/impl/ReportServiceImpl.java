@@ -9,30 +9,42 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 统计分析业务实现。
+ */
 public class ReportServiceImpl implements ReportService {
 
     private final InventoryMapper inventoryMapper;
     private final MasterDataMapper masterDataMapper;
 
+    /**
+     * 统计仪表盘汇总数据。
+     */
     @Override
-    public InventoryDtos.DashboardView dashboard() {
+    public InventoryDtos.DashboardView dashboard(InventoryDtos.ReportQuery query) {
+        String startTime = startTime(query);
+        String endTime = endTime(query);
         InventoryDtos.DashboardView view = new InventoryDtos.DashboardView();
         view.setProductCount(masterDataMapper.countProducts());
         view.setStockQuantity(inventoryMapper.sumStockQuantity());
         view.setStockAmount(inventoryMapper.sumStockAmount());
-        view.setPurchaseAmount(inventoryMapper.sumPurchaseAmount());
-        view.setSaleAmount(inventoryMapper.sumSaleAmount());
-        view.setGrossProfit(inventoryMapper.sumGrossProfit());
+        view.setPurchaseAmount(inventoryMapper.sumPurchaseAmount(startTime, endTime));
+        view.setSaleAmount(inventoryMapper.sumSaleAmount(startTime, endTime));
+        view.setGrossProfit(inventoryMapper.sumGrossProfit(startTime, endTime));
         view.setLowStockCount(masterDataMapper.countLowStock());
         return view;
     }
 
+    /**
+     * 计算库存 ABC 分类结果。
+     */
     @Override
     public List<InventoryDtos.AbcItemView> abcAnalysis() {
         List<Map<String, Object>> source = inventoryMapper.abcSource();
@@ -61,11 +73,16 @@ public class ReportServiceImpl implements ReportService {
         return result;
     }
 
+    /**
+     * 按时间范围统计库存周转率。
+     */
     @Override
-    public List<InventoryDtos.TurnoverView> turnoverAnalysis() {
+    public List<InventoryDtos.TurnoverView> turnoverAnalysis(InventoryDtos.ReportQuery query) {
+        String startTime = startTime(query);
+        String endTime = endTime(query);
         BigDecimal averageInventoryCost = inventoryMapper.averageInventoryCost();
         List<InventoryDtos.TurnoverView> result = new ArrayList<>();
-        for (Map<String, Object> row : inventoryMapper.monthlySalesCost()) {
+        for (Map<String, Object> row : inventoryMapper.monthlySalesCost(startTime, endTime)) {
             InventoryDtos.TurnoverView view = new InventoryDtos.TurnoverView();
             BigDecimal salesCost = (BigDecimal) row.get("salesCost");
             view.setPeriod((String) row.get("period"));
@@ -77,5 +94,20 @@ public class ReportServiceImpl implements ReportService {
             result.add(view);
         }
         return result;
+    }
+
+    private String startTime(InventoryDtos.ReportQuery query) {
+        if (query == null || query.getStartDate() == null) {
+            return null;
+        }
+        return query.getStartDate() + " 00:00:00";
+    }
+
+    private String endTime(InventoryDtos.ReportQuery query) {
+        LocalDate endDate = query == null ? null : query.getEndDate();
+        if (endDate == null) {
+            return null;
+        }
+        return endDate + " 23:59:59";
     }
 }

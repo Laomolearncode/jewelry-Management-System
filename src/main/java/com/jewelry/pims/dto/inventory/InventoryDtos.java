@@ -1,12 +1,15 @@
 package com.jewelry.pims.dto.inventory;
 
+import com.jewelry.pims.common.PageQuery;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -94,5 +97,22 @@ public final class InventoryDtos {
     public static class TraceQuery {
         @NotBlank(message = "查询关键字不能为空")
         private String keyword;
+    }
+
+    @Data
+    public static class StockQuery extends PageQuery {
+        private String productCode;
+        private String productName;
+        private String batchNo;
+        private String certificateNo;
+        private Boolean lowStockOnly = false;
+    }
+
+    @Data
+    public static class ReportQuery {
+        @DateTimeFormat(pattern = "yyyy-MM-dd")
+        private LocalDate startDate;
+        @DateTimeFormat(pattern = "yyyy-MM-dd")
+        private LocalDate endDate;
     }
 }

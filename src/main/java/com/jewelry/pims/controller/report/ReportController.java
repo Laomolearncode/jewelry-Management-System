@@ -14,25 +14,37 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
+/**
+ * 统计分析接口。
+ */
 public class ReportController {
 
     private final ReportService reportService;
 
+    /**
+     * 查询仪表盘汇总数据。
+     */
     @GetMapping("/dashboard")
     @Permission("report:dashboard:view")
-    public ApiResponse<InventoryDtos.DashboardView> dashboard() {
-        return ApiResponse.ok(reportService.dashboard());
+    public ApiResponse<InventoryDtos.DashboardView> dashboard(InventoryDtos.ReportQuery query) {
+        return ApiResponse.ok(reportService.dashboard(query));
     }
 
+    /**
+     * 查询 ABC 分类分析结果。
+     */
     @GetMapping("/abc")
     @Permission("report:abc:view")
     public ApiResponse<List<InventoryDtos.AbcItemView>> abc() {
         return ApiResponse.ok(reportService.abcAnalysis());
     }
 
+    /**
+     * 查询库存周转率分析结果。
+     */
     @GetMapping("/turnover")
     @Permission("report:turnover:view")
-    public ApiResponse<List<InventoryDtos.TurnoverView>> turnover() {
-        return ApiResponse.ok(reportService.turnoverAnalysis());
+    public ApiResponse<List<InventoryDtos.TurnoverView>> turnover(InventoryDtos.ReportQuery query) {
+        return ApiResponse.ok(reportService.turnoverAnalysis(query));
     }
 }

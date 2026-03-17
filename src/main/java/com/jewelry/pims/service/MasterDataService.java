@@ -1,5 +1,6 @@
 package com.jewelry.pims.service;
 
+import com.jewelry.pims.common.PageResult;
 import com.jewelry.pims.domain.MasterEntities;
 import com.jewelry.pims.dto.inventory.InventoryDtos;
 import com.jewelry.pims.dto.master.MasterDtos;
@@ -30,7 +31,9 @@ public interface MasterDataService {
 
     MasterEntities.Product createProduct(MasterDtos.ProductRequest request);
 
-    List<MasterDtos.ProductView> listProducts();
+    PageResult<MasterDtos.ProductView> listProducts(MasterDtos.ProductQuery query);
 
-    List<InventoryDtos.StockView> listStocks();
+    PageResult<InventoryDtos.StockView> listStocks(InventoryDtos.StockQuery query);
+
+    PageResult<InventoryDtos.StockView> listLowStocks(InventoryDtos.StockQuery query);
 }

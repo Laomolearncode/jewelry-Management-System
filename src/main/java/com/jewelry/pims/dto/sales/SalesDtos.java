@@ -1,12 +1,15 @@
 package com.jewelry.pims.dto.sales;
 
+import com.jewelry.pims.common.PageQuery;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -69,5 +72,16 @@ public final class SalesDtos {
         private BigDecimal unitPrice;
         private BigDecimal unitCost;
         private BigDecimal subtotalAmount;
+    }
+
+    @Data
+    public static class SaleOrderQuery extends PageQuery {
+        private String orderNo;
+        private String status;
+        private String certificateNo;
+        @DateTimeFormat(pattern = "yyyy-MM-dd")
+        private LocalDate startDate;
+        @DateTimeFormat(pattern = "yyyy-MM-dd")
+        private LocalDate endDate;
     }
 }

@@ -1,14 +1,13 @@
 package com.jewelry.pims.service;
 
+import com.jewelry.pims.common.PageResult;
 import com.jewelry.pims.dto.sales.SalesDtos;
-
-import java.util.List;
 
 public interface SalesService {
 
     SalesDtos.SaleOrderView createOrder(SalesDtos.SaleOrderCreateRequest request);
 
-    List<SalesDtos.SaleOrderView> listOrders();
+    PageResult<SalesDtos.SaleOrderView> listOrders(SalesDtos.SaleOrderQuery query);
 
     SalesDtos.SaleOrderView getOrder(Long id);
 

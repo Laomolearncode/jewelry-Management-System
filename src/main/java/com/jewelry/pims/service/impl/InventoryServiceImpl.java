@@ -1,7 +1,11 @@
 package com.jewelry.pims.service.impl;
 
 import com.jewelry.pims.common.BusinessException;
+import com.jewelry.pims.common.DocumentStatus;
+import com.jewelry.pims.common.InventoryTxnType;
 import com.jewelry.pims.common.NoGenerator;
+import com.jewelry.pims.common.SourceType;
+import com.jewelry.pims.common.TraceType;
 import com.jewelry.pims.domain.BusinessEntities;
 import com.jewelry.pims.domain.MasterEntities;
 import com.jewelry.pims.dto.inventory.InventoryDtos;
@@ -20,18 +24,24 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 盘点与溯源业务实现。
+ */
 public class InventoryServiceImpl implements InventoryService {
 
     private final InventoryMapper inventoryMapper;
     private final MasterDataMapper masterDataMapper;
 
+    /**
+     * 创建盘点单及其明细。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public BusinessEntities.StockCheckOrder createStockCheck(InventoryDtos.StockCheckCreateRequest request) {
         BusinessEntities.StockCheckOrder order = new BusinessEntities.StockCheckOrder();
         order.setCheckNo(NoGenerator.generate("CHK"));
         order.setWarehouseId(request.getWarehouseId());
-        order.setStatus("DRAFT");
+        order.setStatus(DocumentStatus.DRAFT.name());
         order.setRemark(request.getRemark());
         order.setCreatedBy(AuthContext.userId());
         inventoryMapper.insertCheckOrder(order);
@@ -49,22 +59,29 @@ public class InventoryServiceImpl implements InventoryService {
             item.setDiffQuantity(requestItem.getActualQuantity() - stock.getQuantity());
             inventoryMapper.insertCheckItem(item);
         }
+        writeTrace(TraceType.CHECK_CREATED, SourceType.STOCK_CHECK, order.getCheckNo(), null, null, null, "盘点单创建");
         return order;
     }
 
+    /**
+     * 查询盘点单列表。
+     */
     @Override
     public List<BusinessEntities.StockCheckOrder> listStockChecks() {
         return inventoryMapper.listCheckOrders();
     }
 
+    /**
+     * 审核盘点单并写入调整流水。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void approveStockCheck(Long id) {
         BusinessEntities.StockCheckOrder order = inventoryMapper.findCheckOrderById(id);
         if (order == null) {
             throw new BusinessException("盘点单不存在");
         }
-        if (!"DRAFT".equals(order.getStatus())) {
+        if (!DocumentStatus.DRAFT.name().equals(order.getStatus())) {
             throw new BusinessException("盘点单状态错误");
         }
         List<BusinessEntities.StockCheckItem> items = inventoryMapper.listCheckItems(id);
@@ -85,7 +102,7 @@ public class InventoryServiceImpl implements InventoryService {
 
             BusinessEntities.InventoryTxn txn = new BusinessEntities.InventoryTxn();
             txn.setTxnNo(NoGenerator.generate("TXN"));
-            txn.setTxnType("CHECK_ADJUST");
+            txn.setTxnType(InventoryTxnType.CHECK_ADJUST.name());
             txn.setWarehouseId(stock.getWarehouseId());
             txn.setProductId(stock.getProductId());
             txn.setRelatedOrderId(order.getId());
@@ -101,25 +118,34 @@ public class InventoryServiceImpl implements InventoryService {
             txn.setCreatedBy(AuthContext.userId());
             inventoryMapper.insertTxn(txn);
 
-            BusinessEntities.TraceLog traceLog = new BusinessEntities.TraceLog();
-            traceLog.setTraceType("CHECK_ADJUST");
-            traceLog.setSourceType("STOCK_CHECK");
-            traceLog.setSourceNo(order.getCheckNo());
-            traceLog.setProductId(stock.getProductId());
-            traceLog.setBatchNo(stock.getBatchNo());
-            traceLog.setCertificateNo(stock.getCertificateNo());
-            traceLog.setContent("盘点调整，差异数量=" + diffQuantity);
-            traceLog.setCreatedBy(AuthContext.userId());
-            inventoryMapper.insertTrace(traceLog);
+            writeTrace(TraceType.CHECK_ADJUST, SourceType.STOCK_CHECK, order.getCheckNo(), stock.getProductId(),
+                    stock.getBatchNo(), stock.getCertificateNo(), "盘点调整，差异数量=" + diffQuantity);
         }
-        order.setStatus("APPROVED");
+        order.setStatus(DocumentStatus.APPROVED.name());
         order.setApprovedBy(AuthContext.userId());
         order.setApprovedAt(LocalDateTime.now());
         inventoryMapper.updateCheckOrder(order);
     }
 
+    /**
+     * 查询指定关键字的溯源记录。
+     */
     @Override
     public List<InventoryDtos.TraceView> trace(String keyword) {
         return inventoryMapper.queryTrace(keyword);
+    }
+
+    private void writeTrace(TraceType traceType, SourceType sourceType, String sourceNo,
+                            Long productId, String batchNo, String certificateNo, String content) {
+        BusinessEntities.TraceLog traceLog = new BusinessEntities.TraceLog();
+        traceLog.setTraceType(traceType.name());
+        traceLog.setSourceType(sourceType.name());
+        traceLog.setSourceNo(sourceNo);
+        traceLog.setProductId(productId);
+        traceLog.setBatchNo(batchNo);
+        traceLog.setCertificateNo(certificateNo);
+        traceLog.setContent(content);
+        traceLog.setCreatedBy(AuthContext.userId());
+        inventoryMapper.insertTrace(traceLog);
     }
 }

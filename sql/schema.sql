@@ -273,7 +273,11 @@ CREATE TABLE trace_log (
 );
 
 CREATE INDEX idx_purchase_supplier ON purchase_order(supplier_id);
+CREATE INDEX idx_purchase_status_created ON purchase_order(status, created_at);
 CREATE INDEX idx_sale_customer ON sale_order(customer_id);
+CREATE INDEX idx_sale_status_created ON sale_order(status, created_at);
 CREATE INDEX idx_stock_product ON stock(product_id);
+CREATE INDEX idx_stock_certificate ON stock(certificate_no);
+CREATE INDEX idx_product_certificate ON product(certificate_no);
 CREATE INDEX idx_trace_certificate ON trace_log(certificate_no);
 CREATE INDEX idx_trace_batch ON trace_log(batch_no);

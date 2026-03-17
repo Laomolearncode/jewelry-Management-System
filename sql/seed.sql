@@ -1,7 +1,7 @@
 USE jewelry_pims;
 
 INSERT INTO sys_user(username, password, real_name, phone, status, created_at, updated_at)
-VALUES ('admin', 'admin123', '系统管理员', '13800000000', 1, NOW(), NOW());
+VALUES ('admin', '$2b$12$yv9bWwY.PbnVVgkkymRldeKkSxBpQtXszMdo2s.kI91i.fBIGS7VS', '系统管理员', '13800000000', 1, NOW(), NOW());
 
 INSERT INTO sys_role(role_code, role_name, description, status)
 VALUES

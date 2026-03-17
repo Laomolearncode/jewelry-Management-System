@@ -5,6 +5,7 @@ import com.jewelry.pims.dto.inventory.InventoryDtos;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -84,22 +85,46 @@ public interface InventoryMapper {
     BigDecimal sumStockAmount();
 
     @Select("""
+            <script>
             select ifnull(sum(total_amount), 0) from purchase_order
             where status = 'STOCKED'
+            <if test="startTime != null">
+              and created_at <![CDATA[>=]]> #{startTime}
+            </if>
+            <if test="endTime != null">
+              and created_at <![CDATA[<=]]> #{endTime}
+            </if>
+            </script>
             """)
-    BigDecimal sumPurchaseAmount();
+    BigDecimal sumPurchaseAmount(@Param("startTime") String startTime, @Param("endTime") String endTime);
 
     @Select("""
+            <script>
             select ifnull(sum(total_amount), 0) from sale_order
             where status = 'APPROVED'
+            <if test="startTime != null">
+              and created_at <![CDATA[>=]]> #{startTime}
+            </if>
+            <if test="endTime != null">
+              and created_at <![CDATA[<=]]> #{endTime}
+            </if>
+            </script>
             """)
-    BigDecimal sumSaleAmount();
+    BigDecimal sumSaleAmount(@Param("startTime") String startTime, @Param("endTime") String endTime);
 
     @Select("""
+            <script>
             select ifnull(sum(total_amount - total_cost), 0) from sale_order
             where status = 'APPROVED'
+            <if test="startTime != null">
+              and created_at <![CDATA[>=]]> #{startTime}
+            </if>
+            <if test="endTime != null">
+              and created_at <![CDATA[<=]]> #{endTime}
+            </if>
+            </script>
             """)
-    BigDecimal sumGrossProfit();
+    BigDecimal sumGrossProfit(@Param("startTime") String startTime, @Param("endTime") String endTime);
 
     @Select("""
             select ifnull(sum(quantity), 0) from stock
@@ -116,14 +141,22 @@ public interface InventoryMapper {
     List<Map<String, Object>> abcSource();
 
     @Select("""
+            <script>
             select date_format(created_at, '%Y-%m') as period, ifnull(sum(total_cost), 0) as salesCost
             from sale_order
             where status = 'APPROVED'
+            <if test="startTime != null">
+              and created_at <![CDATA[>=]]> #{startTime}
+            </if>
+            <if test="endTime != null">
+              and created_at <![CDATA[<=]]> #{endTime}
+            </if>
             group by date_format(created_at, '%Y-%m')
             order by period desc
             limit 12
+            </script>
             """)
-    List<Map<String, Object>> monthlySalesCost();
+    List<Map<String, Object>> monthlySalesCost(@Param("startTime") String startTime, @Param("endTime") String endTime);
 
     @Select("""
             select ifnull(avg(quantity * avg_cost_price), 0) from stock

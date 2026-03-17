@@ -1,7 +1,13 @@
 package com.jewelry.pims.service.impl;
 
 import com.jewelry.pims.common.BusinessException;
+import com.jewelry.pims.common.DocumentStatus;
+import com.jewelry.pims.common.InventoryTxnType;
 import com.jewelry.pims.common.NoGenerator;
+import com.jewelry.pims.common.PageResult;
+import com.jewelry.pims.common.PageUtils;
+import com.jewelry.pims.common.SourceType;
+import com.jewelry.pims.common.TraceType;
 import com.jewelry.pims.domain.BusinessEntities;
 import com.jewelry.pims.domain.MasterEntities;
 import com.jewelry.pims.dto.purchase.PurchaseDtos;
@@ -13,23 +19,31 @@ import com.jewelry.pims.service.PurchaseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 采购业务实现。
+ */
 public class PurchaseServiceImpl implements PurchaseService {
 
     private final PurchaseMapper purchaseMapper;
     private final MasterDataMapper masterDataMapper;
     private final InventoryMapper inventoryMapper;
 
+    /**
+     * 创建采购单和采购明细。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public PurchaseDtos.PurchaseOrderView createOrder(PurchaseDtos.PurchaseOrderCreateRequest request) {
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (PurchaseDtos.PurchaseItemRequest item : request.getItems()) {
@@ -41,7 +55,7 @@ public class PurchaseServiceImpl implements PurchaseService {
         BusinessEntities.PurchaseOrder order = new BusinessEntities.PurchaseOrder();
         order.setOrderNo(NoGenerator.generate("PO"));
         order.setSupplierId(request.getSupplierId());
-        order.setStatus("DRAFT");
+        order.setStatus(DocumentStatus.DRAFT.name());
         order.setTotalAmount(totalAmount);
         order.setCreatedBy(AuthContext.userId());
         purchaseMapper.insertOrder(order);
@@ -59,18 +73,30 @@ public class PurchaseServiceImpl implements PurchaseService {
             item.setSubtotalAmount(requestItem.getUnitPrice().multiply(BigDecimal.valueOf(requestItem.getQuantity())));
             purchaseMapper.insertItem(item);
         }
+        writeTrace(TraceType.PURCHASE_CREATED, SourceType.PURCHASE_ORDER, order.getOrderNo(), null, null, null, "采购单创建");
         return getOrder(order.getId());
     }
 
+    /**
+     * 按条件分页查询采购单。
+     */
     @Override
-    public List<PurchaseDtos.PurchaseOrderView> listOrders() {
-        List<PurchaseDtos.PurchaseOrderView> result = new ArrayList<>();
-        for (BusinessEntities.PurchaseOrder order : purchaseMapper.listOrders()) {
-            result.add(buildView(order));
-        }
-        return result;
+    public PageResult<PurchaseDtos.PurchaseOrderView> listOrders(PurchaseDtos.PurchaseOrderQuery query) {
+        PurchaseDtos.PurchaseOrderQuery safeQuery = query == null ? new PurchaseDtos.PurchaseOrderQuery() : query;
+        List<PurchaseDtos.PurchaseOrderView> filtered = purchaseMapper.listOrders().stream()
+                .map(this::buildView)
+                .filter(item -> !StringUtils.hasText(safeQuery.getOrderNo()) || item.getOrderNo().contains(safeQuery.getOrderNo()))
+                .filter(item -> !StringUtils.hasText(safeQuery.getStatus()) || safeQuery.getStatus().equals(item.getStatus()))
+                .filter(item -> !StringUtils.hasText(safeQuery.getCertificateNo()) || containsCertificate(item, safeQuery.getCertificateNo()))
+                .filter(item -> safeQuery.getStartDate() == null || !item.getCreatedAt().toLocalDate().isBefore(safeQuery.getStartDate()))
+                .filter(item -> safeQuery.getEndDate() == null || !item.getCreatedAt().toLocalDate().isAfter(safeQuery.getEndDate()))
+                .collect(Collectors.toList());
+        return PageUtils.paginate(filtered, safeQuery);
     }
 
+    /**
+     * 查询采购单详情。
+     */
     @Override
     public PurchaseDtos.PurchaseOrderView getOrder(Long id) {
         BusinessEntities.PurchaseOrder order = purchaseMapper.findOrderById(id);
@@ -80,31 +106,37 @@ public class PurchaseServiceImpl implements PurchaseService {
         return buildView(order);
     }
 
+    /**
+     * 审核采购单。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void approve(Long id) {
         BusinessEntities.PurchaseOrder order = purchaseMapper.findOrderById(id);
         if (order == null) {
             throw new BusinessException("采购单不存在");
         }
-        if (!"DRAFT".equals(order.getStatus())) {
+        if (!DocumentStatus.DRAFT.name().equals(order.getStatus())) {
             throw new BusinessException("仅草稿单可审核");
         }
-        order.setStatus("APPROVED");
+        order.setStatus(DocumentStatus.APPROVED.name());
         order.setApprovedBy(AuthContext.userId());
         order.setApprovedAt(LocalDateTime.now());
         purchaseMapper.updateOrderStatus(order);
-        writeTrace("PURCHASE_APPROVED", "PURCHASE_ORDER", order.getOrderNo(), null, null, null, "采购单审核通过");
+        writeTrace(TraceType.PURCHASE_APPROVED, SourceType.PURCHASE_ORDER, order.getOrderNo(), null, null, null, "采购单审核通过");
     }
 
+    /**
+     * 根据采购单执行入库并写入库存流水。
+     */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void stockIn(Long id) {
         BusinessEntities.PurchaseOrder order = purchaseMapper.findOrderById(id);
         if (order == null) {
             throw new BusinessException("采购单不存在");
         }
-        if (!"APPROVED".equals(order.getStatus())) {
+        if (!DocumentStatus.APPROVED.name().equals(order.getStatus())) {
             throw new BusinessException("仅审核通过的采购单可入库");
         }
         List<BusinessEntities.PurchaseOrderItem> items = purchaseMapper.listItemsByOrderId(id);
@@ -141,7 +173,7 @@ public class PurchaseServiceImpl implements PurchaseService {
 
             BusinessEntities.InventoryTxn txn = new BusinessEntities.InventoryTxn();
             txn.setTxnNo(NoGenerator.generate("TXN"));
-            txn.setTxnType("PURCHASE_IN");
+            txn.setTxnType(InventoryTxnType.PURCHASE_IN.name());
             txn.setWarehouseId(item.getWarehouseId());
             txn.setProductId(item.getProductId());
             txn.setRelatedOrderId(order.getId());
@@ -157,10 +189,10 @@ public class PurchaseServiceImpl implements PurchaseService {
             txn.setCreatedBy(AuthContext.userId());
             inventoryMapper.insertTxn(txn);
 
-            writeTrace("PURCHASE_IN", "PURCHASE_ORDER", order.getOrderNo(), item.getProductId(), item.getBatchNo(), item.getCertificateNo(),
+            writeTrace(TraceType.PURCHASE_IN, SourceType.PURCHASE_ORDER, order.getOrderNo(), item.getProductId(), item.getBatchNo(), item.getCertificateNo(),
                     "采购入库，数量=" + item.getQuantity());
         }
-        order.setStatus("STOCKED");
+        order.setStatus(DocumentStatus.STOCKED.name());
         order.setApprovedBy(AuthContext.userId());
         order.setApprovedAt(LocalDateTime.now());
         purchaseMapper.updateOrderStatus(order);
@@ -195,11 +227,16 @@ public class PurchaseServiceImpl implements PurchaseService {
         return view;
     }
 
-    private void writeTrace(String traceType, String sourceType, String sourceNo,
+    private boolean containsCertificate(PurchaseDtos.PurchaseOrderView view, String certificateNo) {
+        return view.getItems() != null && view.getItems().stream()
+                .anyMatch(item -> certificateNo.equals(item.getCertificateNo()));
+    }
+
+    private void writeTrace(TraceType traceType, SourceType sourceType, String sourceNo,
                             Long productId, String batchNo, String certificateNo, String content) {
         BusinessEntities.TraceLog traceLog = new BusinessEntities.TraceLog();
-        traceLog.setTraceType(traceType);
-        traceLog.setSourceType(sourceType);
+        traceLog.setTraceType(traceType.name());
+        traceLog.setSourceType(sourceType.name());
         traceLog.setSourceNo(sourceNo);
         traceLog.setProductId(productId);
         traceLog.setBatchNo(batchNo);

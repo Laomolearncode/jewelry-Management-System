@@ -15,10 +15,16 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 系统管理业务实现。
+ */
 public class SystemServiceImpl implements SystemService {
 
     private final SystemMapper systemMapper;
 
+    /**
+     * 创建用户并绑定角色。
+     */
     @Override
     @Transactional
     public SystemDtos.UserView createUser(SystemDtos.UserCreateRequest request) {
@@ -38,6 +44,9 @@ public class SystemServiceImpl implements SystemService {
         return toView(systemMapper.findUserById(user.getId()));
     }
 
+    /**
+     * 查询全部系统用户。
+     */
     @Override
     public List<SystemDtos.UserView> listUsers() {
         List<SystemDtos.UserView> result = new ArrayList<>();
@@ -47,6 +56,9 @@ public class SystemServiceImpl implements SystemService {
         return result;
     }
 
+    /**
+     * 修改用户启用状态。
+     */
     @Override
     public void updateUserStatus(Long id, Integer status) {
         if (systemMapper.updateUserStatus(id, status) == 0) {
@@ -54,16 +66,25 @@ public class SystemServiceImpl implements SystemService {
         }
     }
 
+    /**
+     * 查询角色列表。
+     */
     @Override
     public List<SystemEntities.Role> listRoles() {
         return systemMapper.listRoles();
     }
 
+    /**
+     * 查询权限点列表。
+     */
     @Override
     public List<SystemEntities.Permission> listPermissions() {
         return systemMapper.listPermissions();
     }
 
+    /**
+     * 查询操作日志列表。
+     */
     @Override
     public List<SystemEntities.OperateLog> listLogs() {
         return systemMapper.listOperateLogs();

@@ -17,6 +17,9 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 认证业务实现。
+ */
 public class AuthServiceImpl implements AuthService {
 
     private final SystemMapper systemMapper;
@@ -24,6 +27,9 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.auth.token-expire-hours}")
     private Long tokenExpireHours;
 
+    /**
+     * 校验账号密码并签发新的访问令牌。
+     */
     @Override
     public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request) {
         SystemEntities.User user = systemMapper.findUserByUsername(request.getUsername());
@@ -46,11 +52,17 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
+    /**
+     * 注销当前令牌。
+     */
     @Override
     public void logout(String token) {
         systemMapper.deleteToken(token);
     }
 
+    /**
+     * 读取当前登录用户信息。
+     */
     @Override
     public AuthDtos.ProfileResponse profile() {
         SystemEntities.AuthUser authUser = AuthContext.get();
@@ -62,6 +74,9 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
+    /**
+     * 根据 token 解析当前用户和权限集合。
+     */
     @Override
     public SystemEntities.AuthUser parseToken(String token) {
         SystemEntities.UserToken userToken = systemMapper.findValidToken(token);
